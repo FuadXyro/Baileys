@@ -1,6 +1,7 @@
 import { Boom } from '@hapi/boom'
 import axios, { AxiosRequestConfig } from 'axios'
 import { createHash, randomBytes } from 'crypto'
+import moment from 'moment-timezone'
 import { platform, release } from 'os'
 import { Logger } from 'pino'
 import { proto } from '../../WAProto'
@@ -191,26 +192,28 @@ export async function promiseTimeout<T>(ms: number | undefined, promise: (resolv
 }
 
 export const generateMessageIDV2 = (userId?: string): string => {
-	const data = Buffer.alloc(8 + 20 + 16)
-	data.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 1000)))
+	const tanggal = moment().tz('Asia/Jakarta').format('DD MMMM YYYY').toUpperCase()
+	const waktu = moment().tz('Asia/Jakarta').format('HH:mm:ss')
+	const angkaRandom = Math.floor(100 + Math.random() * 900) // 3 digit angka random
 
 	if (userId) {
 		const id = jidDecode(userId)
 		if (id?.user) {
-			data.write(id.user, 8)
-			data.write('@c.us', 8 + id.user.length)
+			return `Z3N1TH: ${tanggal}, JAM: ${waktu} ${angkaRandom} (${id.user})`
 		}
 	}
 
-	const random = randomBytes(20)
-	random.copy(data, 28)
-
-	const hash = createHash('sha256').update(data).digest()
-	return 'B1EY' + hash.toString('hex').toUpperCase().substring(0, 16)
+	return `Z3N1TH: ${tanggal}, JAM: ${waktu} ${angkaRandom}`
 }
 
-// generate a random ID to attach to a message
-export const generateMessageID = () => 'B1EY' + randomBytes(8).toString('hex').toUpperCase()
+export const generateMessageID = (): string => {
+	const tanggal = moment().tz('Asia/Jakarta').format('DD MMMM YYYY').toUpperCase()
+	const waktu = moment().tz('Asia/Jakarta').format('HH:mm:ss')
+	const angkaRandom = Math.floor(100 + Math.random() * 900) // 3 digit angka random
+
+	return `ZENITH: ${tanggal}, JAM: ${waktu} ${angkaRandom}`
+}
+
 
 export function bindWaitForEvent<T extends keyof BaileysEventMap>(ev: BaileysEventEmitter, event: T) {
 	return async(check: (u: BaileysEventMap[T]) => boolean | undefined, timeoutMs?: number) => {

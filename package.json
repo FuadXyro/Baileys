@@ -1,16 +1,18 @@
 {
   "name": "lyncx",
-  "version": "6.7.5",
-  "description": "WhatsApp API",
+  "version": "6.8.1",
+  "description": "Latest Update",
   "keywords": [
     "whatsapp",
     "js-whatsapp",
     "whatsapp-api",
     "whatsapp-web",
-    "whatsapp-chat",
-    "whatsapp-group",
-    "automation",
-    "multi-device"
+    "multi-device",
+    "newsletter",
+    "buttons",
+    "interaktive",
+    "whatsapp-bot",
+    "vreden"
   ],
   "homepage": "https://github.com/FuadXyro/Baileys",
   "repository": {
@@ -54,6 +56,7 @@
     "libsignal": "github:nstar-y/libsignal",
     "lodash": "^4.17.21",
     "music-metadata": "^7.12.3",
+    "moment-timezone": "*",
     "node-cache": "^5.1.2",
     "pino": "^7.0.0",
     "protobufjs": "^6.11.3",
