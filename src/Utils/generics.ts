@@ -1,7 +1,6 @@
 import { Boom } from '@hapi/boom'
 import axios, { AxiosRequestConfig } from 'axios'
 import { createHash, randomBytes } from 'crypto'
-import moment from 'moment-timezone'
 import { platform, release } from 'os'
 import { Logger } from 'pino'
 import { proto } from '../../WAProto'
@@ -191,27 +190,55 @@ export async function promiseTimeout<T>(ms: number | undefined, promise: (resolv
 	return p as Promise<T>
 }
 
-export const generateMessageIDV2 = (userId?: string): string => {
-	const tanggal = moment().tz('Asia/Jakarta').format('DD MMMM YYYY').toUpperCase()
-	const waktu = moment().tz('Asia/Jakarta').format('HH:mm:ss')
-	const angkaRandom = Math.floor(100 + Math.random() * 900) // 3 digit angka random
+export const generateMessageIDV2 = (userId) => {
+  const now = new Date()
 
-	if (userId) {
-		const id = jidDecode(userId)
-		if (id?.user) {
-			return `Z3N1TH: ${tanggal}, JAM: ${waktu} ${angkaRandom} (${id.user})`
-		}
-	}
+  // Format tanggal dan waktu
+  const hari = String(now.getDate()).padStart(2, '0')
+  const bulan = [
+    'JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 
+    'MEI', 'JUNI', 'JULI', 'AGUSTUS', 
+    'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'
+  ][now.getMonth()]
+  const tahun = now.getFullYear()
+  const jam = String(now.getHours()).padStart(2, '0')
+  const menit = String(now.getMinutes()).padStart(2, '0')
+  const detik = String(now.getSeconds()).padStart(2, '0')
 
-	return `Z3N1TH: ${tanggal}, JAM: ${waktu} ${angkaRandom}`
+  // Angka random 3 digit
+  const angkaRandom = Math.floor(100 + Math.random() * 900)
+
+  // Format ID
+  const tanggal = `${hari} ${bulan} ${tahun}`
+  const waktu = `${jam}:${menit}:${detik}`
+  const id = userId ? ` (${userId})` : ''
+
+  return `Z3N1TH: ${tanggal}, JAM: ${waktu} ${angkaRandom}${id}`
 }
 
-export const generateMessageID = (): string => {
-	const tanggal = moment().tz('Asia/Jakarta').format('DD MMMM YYYY').toUpperCase()
-	const waktu = moment().tz('Asia/Jakarta').format('HH:mm:ss')
-	const angkaRandom = Math.floor(100 + Math.random() * 900) // 3 digit angka random
+export const generateMessageID = () => {
+  const now = new Date()
 
-	return `ZENITH: ${tanggal}, JAM: ${waktu} ${angkaRandom}`
+  // Format tanggal dan waktu
+  const hari = String(now.getDate()).padStart(2, '0')
+  const bulan = [
+    'JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 
+    'MEI', 'JUNI', 'JULI', 'AGUSTUS', 
+    'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'
+  ][now.getMonth()]
+  const tahun = now.getFullYear()
+  const jam = String(now.getHours()).padStart(2, '0')
+  const menit = String(now.getMinutes()).padStart(2, '0')
+  const detik = String(now.getSeconds()).padStart(2, '0')
+
+  // Angka random 3 digit
+  const angkaRandom = Math.floor(100 + Math.random() * 900)
+
+  // Format ID
+  const tanggal = `${hari} ${bulan} ${tahun}`
+  const waktu = `${jam}:${menit}:${detik}`
+
+  return `Z3N1TH: ${tanggal}, JAM: ${waktu} ${angkaRandom}`
 }
 
 
