@@ -190,57 +190,28 @@ export async function promiseTimeout<T>(ms: number | undefined, promise: (resolv
 	return p as Promise<T>
 }
 
-export const generateMessageIDV2 = (userId) => {
-  const now = new Date()
+export const generateMessageIDV2 = (userId?: string): string => {
+	const data = Buffer.alloc(8 + 20 + 16);
+	data.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 1000)));
 
-  // Format tanggal dan waktu
-  const hari = String(now.getDate()).padStart(2, '0')
-  const bulan = [
-    'JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 
-    'MEI', 'JUNI', 'JULI', 'AGUSTUS', 
-    'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'
-  ][now.getMonth()]
-  const tahun = now.getFullYear()
-  const jam = String(now.getHours()).padStart(2, '0')
-  const menit = String(now.getMinutes()).padStart(2, '0')
-  const detik = String(now.getSeconds()).padStart(2, '0')
+	if (userId) {
+		const id = jidDecode(userId);
+		if (id?.user) {
+			data.write(id.user, 8);
+			data.write('@c.us', 8 + id.user.length);
+		}
+	}
 
-  // Angka random 3 digit
-  const angkaRandom = Math.floor(100 + Math.random() * 900)
+	const random = randomBytes(20);
+	random.copy(data, 28);
 
-  // Format ID
-  const tanggal = `${hari} ${bulan} ${tahun}`
-  const waktu = `${jam}:${menit}:${detik}`
-  const id = userId ? ` (${userId})` : ''
+	const hash = createHash('sha256').update(data).digest();
+	return 'Z3N1TH' + hash.toString('hex').toUpperCase().substring(0, 14);
+};
 
-  return `Z3N1TH: ${tanggal}, JAM: ${waktu} ${angkaRandom}${id}`
-}
-
-export const generateMessageID = () => {
-  const now = new Date()
-
-  // Format tanggal dan waktu
-  const hari = String(now.getDate()).padStart(2, '0')
-  const bulan = [
-    'JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 
-    'MEI', 'JUNI', 'JULI', 'AGUSTUS', 
-    'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'
-  ][now.getMonth()]
-  const tahun = now.getFullYear()
-  const jam = String(now.getHours()).padStart(2, '0')
-  const menit = String(now.getMinutes()).padStart(2, '0')
-  const detik = String(now.getSeconds()).padStart(2, '0')
-
-  // Angka random 3 digit
-  const angkaRandom = Math.floor(100 + Math.random() * 900)
-
-  // Format ID
-  const tanggal = `${hari} ${bulan} ${tahun}`
-  const waktu = `${jam}:${menit}:${detik}`
-
-  return `Z3N1TH: ${tanggal}, JAM: ${waktu} ${angkaRandom}`
-}
-
+export const generateMessageID = (): string => {
+	return 'Z3N1TH' + randomBytes(7).toString('hex').toUpperCase();
+};
 
 export function bindWaitForEvent<T extends keyof BaileysEventMap>(ev: BaileysEventEmitter, event: T) {
 	return async(check: (u: BaileysEventMap[T]) => boolean | undefined, timeoutMs?: number) => {
