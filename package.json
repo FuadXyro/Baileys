@@ -1,23 +1,19 @@
 {
-  "name": "lyncx",
-  "version": "6.8.2",
-  "description": "Button akan kembali disini.",
+  "name": "@lyncx/meta",
+  "version": "6.6.1",
+  "description": "WhatsApp API", 
   "keywords": [
-    "lyncx",
     "whatsapp",
     "js-whatsapp",
     "whatsapp-api",
     "whatsapp-web",
     "multi-device",
-    "newsletter",
-    "buttons",
-    "interaktive",
-    "whatsapp-bot"
-  
+    "md",
+    "zenith"
   ],
-  "homepage": "https://github.com/fuadxyro/baileys",
+  "homepage": "https://github.com/WhiskeySockets/Baileys",
   "repository": {
-    "url": "git+ssh://git@github.com/fuadxyro/baileys.git"
+    "url": "git+ssh://git@github.com/WhiskeySockets/Baileys.git"
   },
   "license": "MIT",
   "author": "Adhiraj Singh",
