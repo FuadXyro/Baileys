@@ -1,7 +1,7 @@
 {
   "name": "@lyncx/meta",
-  "version": "6.6.1",
-  "description": "WhatsApp API", 
+  "version": "6.6.6",
+  "description": "Meta baileys by fuadxyro", 
   "keywords": [
     "whatsapp",
     "js-whatsapp",
@@ -11,9 +11,9 @@
     "md",
     "zenith"
   ],
-  "homepage": "https://github.com/WhiskeySockets/Baileys",
+  "homepage": "https://github.com/fuadxyro/baileys",
   "repository": {
-    "url": "git+ssh://git@github.com/WhiskeySockets/Baileys.git"
+    "url": "git+ssh://git@github.com/fuadxyro/baileys.git"
   },
   "license": "MIT",
   "author": "Adhiraj Singh",
