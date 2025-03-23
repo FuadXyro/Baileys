@@ -1,4 +1,4 @@
-
+# Baileys - Typescript/Javascript WhatsApp Web API Modified by FuadXyro 
 
 ### Important Note
 
@@ -13,13 +13,13 @@ Baileys does not require Selenium or any other browser to be interface with What
 Not running Selenium or Chromimum saves you like **half a gig** of ram :/ 
 Baileys supports interacting with the multi-device & web versions of WhatsApp.
 Thank you to [@pokearaujo](https://github.com/pokearaujo/multidevice) for writing his observations on the workings of WhatsApp Multi-Device. Also, thank you to [@Sigalor](https://github.com/sigalor/whatsapp-web-reveng) for writing his observations on the workings of WhatsApp Web and thanks to [@Rhymen](https://github.com/Rhymen/go-whatsapp/) for the __go__ implementation.
-
+ 
 ## Please Read
 
 The original repository had to be removed by the original author - we now continue development in this repository here.
 This is the only official repository and is maintained by the community.
  **Join the Discord [here](https://discord.gg/WeJM5FP9GG)**
-
+ 
 ## Example
 
 Do check out & run [example.ts](Example/example.ts) to see an example usage of the library.
@@ -89,6 +89,16 @@ connectToWhatsApp()
 
 If the connection is successful, you will see a QR code printed on your terminal screen, scan it with WhatsApp on your phone and you'll be logged in!
 
+**Note:** install `qrcode-terminal` using `yarn add qrcode-terminal` to auto-print the QR to the terminal.
+
+**Note:** the code to support the legacy version of WA Web (pre multi-device) has been removed in v5. Only the standard multi-device connection is now supported. This is done as WA seems to have completely dropped support for the legacy version.
+
+## Connecting native mobile api
+
+Baileys also supports the native mobile API, which allows users to authenticate as a standalone WhatsApp client using their phone number.
+
+Run the [example](Example/example.ts) file with ``--mobile`` cli flag to use the native mobile API.
+
 ## Configuring the Connection
 
 You can configure the connection by passing a `SocketConfig` object.
@@ -99,21 +109,21 @@ type SocketConfig = {
     /** the WS url to connect to WA */
     waWebSocketUrl: string | URL
     /** Fails the connection if the socket times out in this interval */
-        connectTimeoutMs: number
+	connectTimeoutMs: number
     /** Default timeout for queries, undefined for no timeout */
     defaultQueryTimeoutMs: number | undefined
     /** ping-pong interval for WS connection */
     keepAliveIntervalMs: number
     /** proxy agent */
-        agent?: Agent
+	agent?: Agent
     /** pino logger */
-        logger: Logger
+	logger: Logger
     /** version to connect with */
     version: WAVersion
     /** override browser config */
-        browser: WABrowserDescription
-        /** agent used for fetch requests -- uploading/downloading media */
-        fetchAgent?: Agent
+	browser: WABrowserDescription
+	/** agent used for fetch requests -- uploading/downloading media */
+	fetchAgent?: Agent
     /** should the QR be printed in the terminal */
     printQRInTerminal: boolean
     /** should events be emitted for actions done by this socket connection */
@@ -203,19 +213,19 @@ conn.ev.on ('creds.update', saveCreds)
 Baileys now fires the `connection.update` event to let you know something has updated in the connection. This data has the following structure:
 ``` ts
 type ConnectionState = {
-        /** connection is now open, connecting or closed */
-        connection: WAConnectionState
-        /** the error that caused the connection to close */
-        lastDisconnect?: {
-                error: Error
-                date: Date
-        }
-        /** is this a new login */
-        isNewLogin?: boolean
-        /** the current QR code */
-        qr?: string
-        /** has the device received all pending notifications while it was offline */
-        receivedPendingNotifications?: boolean 
+	/** connection is now open, connecting or closed */
+	connection: WAConnectionState
+	/** the error that caused the connection to close */
+	lastDisconnect?: {
+		error: Error
+		date: Date
+	}
+	/** is this a new login */
+	isNewLogin?: boolean
+	/** the current QR code */
+	qr?: string
+	/** has the device received all pending notifications while it was offline */
+	receivedPendingNotifications?: boolean 
 }
 ```
 
@@ -232,7 +242,7 @@ The events are typed as mentioned here:
 
 export type BaileysEventMap = {
     /** connection state has been updated -- WS closed, opened, connecting etc. */
-        'connection.update': Partial<ConnectionState>
+	'connection.update': Partial<ConnectionState>
     /** credentials updated -- some metadata, keys or something */
     'creds.update': Partial<AuthenticationCreds>
     /** history sync, everything is reverse chronologically sorted */
@@ -314,13 +324,13 @@ const sock = makeWASocket({ })
 // the store can listen from a new socket once the current socket outlives its lifetime
 store.bind(sock.ev)
 
-sock.ev.on('chats.upsert', () => {
+sock.ev.on('chats.set', () => {
     // can use "store.chats" however you want, even after the socket dies out
     // "chats" => a KeyedDB instance
     console.log('got chats', store.chats.all())
 })
 
-sock.ev.on('contacts.upsert', () => {
+sock.ev.on('contacts.set', () => {
     console.log('got contacts', Object.values(store.contacts))
 })
 
@@ -333,6 +343,589 @@ The store also provides some simple functions such as `loadMessages` that utiliz
 ## Sending Messages
 
 **Send all types of messages with a single function:**
+
+
+### Update sending message
+I'm here to add some that are missing, and some new ones.
+
+
+#### Poll Result From Newsletter Message
+```ts
+await sock.sendMessage(
+    jid,
+    {
+        pollResult: {
+            name: "Text poll",
+            votes: [["Options 1", 10], ["Options 2", 10]], // 10 For Fake Polling Count Results
+        }
+    }, { quoted : message }
+)
+```
+
+
+#### Status Mentions 
+```ts
+await sock.sendStatusMentions(
+     {
+        text: "Hello", // or image / video / audio ( url or buffer )
+     },
+     [
+      "123456789123456789@g.us",
+      "123456789@s.whatsapp.net",
+      // Enter jid chat here
+     ] // If the Jid Group and Jid Private Chat are included in the JID list, try to make the JID group first starting from the Jid Private Chat or Jid Private Chat in the middle between the group Jid
+)  
+```
+
+
+##### Cards Message
+```ts
+await sock.sendMessage(
+    jid,
+    {
+        text: "Hello",
+        footer: "Footer Message",
+        cards: [
+           {
+              image: { url: 'https://example.jpg' }, // or buffer,
+              title: 'Title Cards',
+              caption: 'Caption Cards',
+              footer: 'Footer Cards',
+              buttons: [
+                  {
+                      name: "quick_reply",
+                      buttonParamsJson: JSON.stringify({
+                         display_text: "Display Button",
+                         id: "ID"
+                      })
+                  },
+                  {
+                      name: "cta_url",
+                      buttonParamsJson: JSON.stringify({
+                         display_text: "Display Button",
+                         url: "https://www.example.com"
+                      })
+                  }
+              ]
+           },
+           {
+              video: { url: 'https://example.mp4' }, // or buffer,
+              title: 'Title Cards',
+              caption: 'Caption Cards',
+              footer: 'Footer Cards',
+              buttons: [
+                  {
+                      name: "quick_reply",
+                      buttonParamsJson: JSON.stringify({
+                         display_text: "Display Button",
+                         id: "ID"
+                      })
+                  },
+                  {
+                      name: "cta_url",
+                      buttonParamsJson: JSON.stringify({
+                         display_text: "Display Button",
+                         url: "https://www.example.com"
+                      })
+                  }
+              ]
+           }
+        ]
+    },
+    { quoted : message }
+)
+```
+
+
+#### Album Message
+```ts
+await sock.sendAlbumMessage(
+    jid,
+    [
+       {
+          image: { url: "https://example.jpg" }, // or buffer
+          caption: "Hello World",
+       },
+       {
+          video: { url: "https://example.mp4" }, // or buffer
+          caption: "Hello World",
+       },
+    ],
+    { 
+       quoted : message, 
+       delay : 2000 // number in seconds
+    }
+)
+```
+
+
+#### Interactive Response Message
+```ts
+await sock.sendMessage(
+    jid, 
+    {
+        buttonReply: {
+             text: 'Text',
+             nativeFlow: { 
+                version: 3,
+             },
+        },
+        type: 'interactive',
+        ephemeral: true,
+    }
+)
+```
+
+
+#### Keep Message
+- You need to pass the key of message, you can retrieve from [store](#implementing-a-data-store) or use a [key](https://baileys.whiskeysockets.io/types/WAMessageKey.html) object
+
+- Time can be:
+
+| Time  | Seconds        |
+|-------|----------------|
+| 24h    | 86.400        |
+| 7d     | 604.800       |
+| 30d    | 2.592.000     |
+
+```ts
+await sock.sendMessage(
+    jid,
+    {
+        keep: message.key,
+        type: 1, // 2 to unpin
+        time: 86400    
+    }
+)
+```
+
+
+#### Pin Message
+- You need to pass the key of message, you can retrieve from [store](#implementing-a-data-store) or use a [key](https://baileys.whiskeysockets.io/types/WAMessageKey.html) object
+
+- Time can be:
+
+| Time  | Seconds        |
+|-------|----------------|
+| 24h    | 86.400        |
+| 7d     | 604.800       |
+| 30d    | 2.592.000     |
+
+```ts
+await sock.sendMessage(
+    jid,
+    {
+        pin: message.key
+        type: 1, // 2 to unpin
+        time: 86400        
+    }
+)
+```
+
+
+#### Group Invite Message With Thumbnail According to Jid
+```ts
+await sock.sendMessage(
+    jid, 
+    { 
+        groupInvite: { 
+            subject: "Your Group Name",  // Group name
+            jid: "1234@g.us", // Group ID 
+            text: "WhatsApp Group Invitation", // Additional information
+            inviteCode: "CODE INVITATION", // Group invitation code
+            inviteExpiration: 86400 * 3, // Expiration time in seconds (example: 86400 for 24 hours)
+        } 
+    },
+    {
+        quoted: message,
+        getProfilePicUrl: sock.profilePictureUrl
+    }
+)
+```
+
+
+#### Group Invite Message With Thumbnail Custom
+```ts
+  const thumbnail = "https://example.jpg" // or buffer
+// The image is used under 300 so that the thumbnail can be displayed 
+  let Jimp = require("jimp");
+  // import Jimp from "jimp"; => for type esm
+  let img = await Jimp.read(thumbnail);
+  let newWidth = img.bitmap.width;
+  let newHeight = img.bitmap.height;
+  if (newWidth > 300 || newHeight > 300) {
+      const aspectRatio = newWidth / newHeight;
+          if (aspectRatio > 1) {
+             newWidth = 300;
+             newHeight = Math.round(newWidth / aspectRatio);
+          } else {
+             newHeight = 300;
+             newWidth = Math.round(newHeight * aspectRatio);
+          }
+      }
+      let buff = await img
+          .resize(newWidth, newHeight)
+          .getBufferAsync(Jimp.MIME_JPEG);
+          
+await sock.sendMessage(
+    jid, 
+    { 
+        groupInvite: { 
+            subject: "Your Group Name",  // Group name
+            jid: "1234@g.us", // Group ID 
+            text: "WhatsApp Group Invitation", // Additional information
+            inviteCode: "CODE INVITATION", // Group invitation code
+            inviteExpiration: number, // Expiration time in seconds (example: 86400 for 24 hours),
+            thumbnail: buff || null // if result not found or error
+        } 
+    },
+    { quoted: message }
+)
+```
+
+
+#### Request Payment Message Available To Quote Message
+```ts
+// Example non media sticker
+await sock.sendMessage(
+    jid,
+    {
+        requestPayment: {      
+           currency: "IDR",
+           amount: "10000000",
+           from: "123456@s.whatsapp.net",
+           note: "Hai Guys",
+           background: { ...background of the message }
+        }
+    },
+    { quoted : message }
+)
+
+
+// with media sticker buffer
+await sock.sendMessage(
+    jid,
+    {
+        requestPayment: {      
+           currency: "IDR",
+           amount: "10000000",
+           from: "123456@s.whatsapp.net",
+           sticker: Buffer,
+           background: { ...background of the message }
+        }
+    },
+    { quoted : message }
+)
+
+
+// with media sticker url
+await sock.sendMessage(
+    jid,
+    {
+        requestPayment: {      
+           currency: "IDR",
+           amount: "10000000",
+           from: "123456@s.whatsapp.net",
+           sticker: { url: Sticker Url },
+           background: { ...background of the message }
+        }
+    },
+    { quoted : message }
+)
+```
+
+
+#### Event Message
+```ts
+await sock.sendMessage(
+   jid, 
+   { 
+       event: {
+           isCanceled: false, // or true for cancel event 
+           name: "Name Event", 
+           description: "Description Event",
+           location: { 
+               degressLatitude: -0, 
+               degressLongitude: - 0 
+           },
+           link: Call Link,
+           startTime: m.messageTimestamp.low,
+           endTime: m.messageTimestamp.low + 86400, // 86400 is day in seconds
+           extraGuestsAllowed: true // or false
+       }
+   },
+   { quoted : message }
+)
+```
+
+
+#### Poll Message
+```ts
+await sock.sendMessage(
+    jid,
+    {
+        poll: {
+            name: 'My Poll',
+            values: ['Option 1', 'Option 2', ...],
+            selectableCount: 1,
+            toAnnouncementGroup: false // or true
+        }
+    },
+    { quoted : message }
+)
+```
+
+
+#### Interactive Message
+```ts
+// Example non header media
+await sock.sendMessage(
+    jid,
+    {
+        text: "Description Of Messages", //Additional information
+        title: "Title Of Messages",
+        subtitle: "Subtitle Message",
+        footer: "Footer Messages",
+        interactiveButtons: [
+             {
+                name: "quick_reply",
+                buttonParamsJson: JSON.stringify({
+                     display_text: "Display Button",
+                     id: "ID"
+                })
+             },
+             {
+                name: "cta_url",
+                buttonParamsJson: JSON.stringify({
+                     display_text: "Display Button",
+                     url: "https://www.example.com"
+                })
+             }
+        ]
+    },
+  {
+    quoted : message
+  }
+)
+
+// Example with media
+await sock.sendMessage(
+    jid,
+    {
+        image: { url : "https://example.jpg" }, // Can buffer
+        caption: "Description Of Messages", //Additional information
+        title: "Title Of Messages",
+        subtitle: "Subtile Message",
+        footer: "Footer Messages",
+        media: true,
+        interactiveButtons: [
+             {
+                name: "quick_reply",
+                buttonParamsJson: JSON.stringify({
+                     display_text: "Display Button",
+                     id: "ID"
+                })
+             },
+             {
+                name: "cta_url",
+                buttonParamsJson: JSON.stringify({
+                     display_text: "Display Button",
+                     url: "https://www.example.com"
+                })
+             }
+        ]
+    },
+  {
+    quoted : message
+  }
+)
+
+// Example with header product
+await sock.sendMessage(
+    jid,
+    {
+        product: {
+            productImage: { url: "https://example.jpg }, //or buffer
+            productImageCount: 1,
+            title: "Title Product",
+            description: "Description Product",
+            priceAmount1000: 20000 * 1000,
+            currencyCode: "IDR",
+            retailerId: "Retail",
+            url: "https://example.com",            
+        },
+        businessOwnerJid: "1234@s.whatsapp.net",
+        caption: "Description Of Messages", //Additional information
+        title: "Title Of Messages",
+        footer: "Footer Messages",
+        media: true,
+        interactiveButtons: [
+             {
+                name: "quick_reply",
+                buttonParamsJson: JSON.stringify({
+                     display_text: "Display Button",
+                     id: "ID"
+                })
+             },
+             {
+                name: "cta_url",
+                buttonParamsJson: JSON.stringify({
+                     display_text: "Display Button",
+                     url: "https://www.example.com"
+                })
+             }
+        ]
+    },
+  {
+    quoted : message
+  }
+)
+```
+
+
+#### Shop Message
+```ts
+// Example non header media
+await sock.sendMessage(
+    jid,
+    {
+        text: "Description Of Messages", //Additional information
+        title: "Title Of Messages",
+        subtitle: "Subtitle Message",
+        footer: "Footer Messages",
+        viewOnce: true, // True it to be sent
+        shop: "WA", // or number 3
+        id: "Id Shop",
+    },
+  {
+    quoted : message
+  }
+)
+
+// Example with media
+await sock.sendMessage(
+    jid,
+    {
+        image: { url : "https://example.jpg" }, // Can buffer
+        caption: "Description Of Messages", //Additional information
+        title: "Title Of Messages",
+        subtitle: "Subtile Message",
+        footer: "Footer Messages", 
+        media: true,
+        viewOnce: true, // True it to be sent               
+        shop: "WA", // or number 3
+        id: "Id Shop",
+    },
+  {
+    quoted : message
+  }
+)
+
+// Example with header product
+await sock.sendMessage(
+    jid,
+    {
+        product: {
+            productImage: { url: "https://example.jpg }, //or buffer
+            productImageCount: 1,
+            title: "Title Product",
+            description: "Description Product",
+            priceAmount1000: 20000 * 1000,
+            currencyCode: "IDR",
+            retailerId: "Retail",
+            url: "https://example.com",            
+        },
+        businessOwnerJid: "1234@s.whatsapp.net",
+        caption: "Description Of Messages", //Additional information
+        title: "Title Of Messages",
+        footer: "Footer Messages", 
+        media: true,
+        viewOnce: true, // True it to be sent
+        shop: "WA", // or number 3
+        id: "Id Shop",
+    },
+  {
+    quoted : message
+  }
+)
+```
+
+
+
+#### Payment Invite Message
+```ts
+await sock.sendMessage(
+   jid, 
+   {
+      paymentInvite: {
+         type: number of type,
+         expiry: number expiry time of payment transaction
+      },
+   }
+)
+```
+
+
+#### Order Message
+```ts
+await sock.sendMessage(
+    jid,
+    {
+        order: {
+           title: "Order Title",
+           amount: Number of Amount * 1000,
+           currency: "IDR", // Currency Code
+           thumbnail: Thumbnail
+           seller: "1234@s.whatsapp.net", // Seller Jid
+           id: "id product",
+           thumbnail: Buffer Or Url,
+           itemCount: 9, 
+           status: 1,
+           surface: 1,
+           text: Additional Information Of Order Message,
+           token: "Token Order",
+        }
+    }
+)
+```
+
+
+#### Invite Channel Admin
+```ts
+  const thumbnail = "https://example.jpg" // or buffer
+// The image is used under 300 so that the thumbnail can be displayed 
+  let Jimp = require("jimp");
+  // import Jimp from "jimp"; => for type esm
+  let img = await Jimp.read(thumbnail);
+  let newWidth = img.bitmap.width;
+  let newHeight = img.bitmap.height;
+  if (newWidth > 300 || newHeight > 300) {
+      const aspectRatio = newWidth / newHeight;
+          if (aspectRatio > 1) {
+             newWidth = 300;
+             newHeight = Math.round(newWidth / aspectRatio);
+          } else {
+             newHeight = 300;
+             newWidth = Math.round(newHeight * aspectRatio);
+          }
+      }
+      let Buffer = await img
+          .resize(newWidth, newHeight)
+          .getBufferAsync(Jimp.MIME_JPEG);
+await sock.sendMessage(
+     jid, 
+     {
+         inviteAdmin: {
+                 jid: "1234@newsletter", // Channel ID
+                 subject: "WhatsApp", // Channel name        
+                 text: "Accept this invitation to be an admin on my WhatsApp channel", // Additional information
+                 inviteExpiration: number, // Expiration time in seconds (example: 86400 for 24 hours)
+                 thumbnail: Buffer || null // Thumbnails in the form of an image buffer
+         }
+    }
+)
+```
+
 
 ### Non-Media Messages
 
@@ -412,8 +1005,7 @@ await sock.sendMessage(
     { 
         video: "./Media/ma_gif.mp4", 
         caption: "hello!",
-        gifPlayback: true,
-        ptv: false // if set to true, will send as a `video note`
+        gifPlayback: true
     }
 )
 
@@ -429,8 +1021,8 @@ await sock.sendMessage(
 
 - `id` is the WhatsApp ID of the person or group you're sending the message to. 
     - It must be in the format ```[country code][phone number]@s.whatsapp.net```
-            - Example for people: ```+19999999999@s.whatsapp.net```. 
-            - For groups, it must be in the format ``` 123456789-123345@g.us ```. 
+	    - Example for people: ```+19999999999@s.whatsapp.net```. 
+	    - For groups, it must be in the format ``` 123456789-123345@g.us ```. 
     - For broadcast lists, it's `[timestamp of creation]@broadcast`.
     - For stories, the ID is `status@broadcast`.
 - For media messages, the thumbnail can be generated automatically for images & stickers provided you add `jimp` or `sharp` as a dependency in your project using `yarn add jimp` or `yarn add sharp`. Thumbnails for videos can also be generated automatically, though, you need to have `ffmpeg` installed on your system.
@@ -610,13 +1202,13 @@ WA uses an encrypted form of communication to send chat/app updates. This has be
   },
   '123456@s.whatsapp.net')
   ```
-
+  
 - Star/unstar a message
   ``` ts
   await sock.chatModify({
   star: {
-          messages: [{ id: 'messageID', fromMe: true // or `false` }],
-              star: true // - true: Star Message; false: Unstar Message
+  	messages: [{ id: 'messageID', fromMe: true // or `false` }],
+      	star: true // - true: Star Message; false: Unstar Message
   }},'123456@s.whatsapp.net');
   ```
 
@@ -668,13 +1260,13 @@ await sock.sendMessage(
     await sock.updateProfileName(name)
     ```
 - To get the display picture of some person/group
-    ``` ts
+``` ts
     // for low res picture
     const ppUrl = await sock.profilePictureUrl("xyz@g.us")
     console.log("download profile picture from: " + ppUrl)
     // for high res picture
     const ppUrl = await sock.profilePictureUrl("xyz@g.us", 'image')
-    ```
+```
 - To change your display picture or a group's
     ``` ts
     const jid = '111234567890-1594482450@g.us' // can be your own too
@@ -792,6 +1384,48 @@ Of course, replace ``` xyz ``` with an actual ID.
     console.log(response)
     ```
 
+## Channel
+- To get newsletter info from code
+    ```ts
+    const key = '123@newsletter'
+    const result = await sock.newsletterMetadata('jid', key)
+    
+    
+    //https://whatsapp.com/channel/key
+    const key = '0028UWS81...'
+    const result = await sock.newsletterMetadata('invite', key)
+    console.log(result)
+    ```
+- To create newsletter
+    ```ts
+    const result = await sock.newsLetterCreate('Name newsletter', 'Description news letter')
+    console.log(result)
+    ```
+- To update subscribed newsletters
+    ```ts
+    const result = await sock.subscribeNewsletterUpdates('123@newsletter')
+    console.log(result)
+    ```
+- To toggle mute newsletters
+    ```ts
+    const result = await sock.newsletterMute(jid) 
+    console.log(result)
+    ```
+- To toggle unmute newsletters
+    ```ts
+    const result = await sock.newsletterUnmute(jid) 
+    console.log(result)
+    ```
+- To follow newsletter
+    ```ts
+    const result = await sock.newsletterFollow(jid)
+    console.log(result)
+    ```
+- To unfollow newsletter
+    ```ts
+    const result = await sock.newsletterUnfollow(jid)
+    console.log(result)
+    ```
 ## Privacy
 - To get the privacy settings
     ``` ts
@@ -825,7 +1459,7 @@ Of course, replace ``` xyz ``` with an actual ID.
     ```
 - To update the Groups Add privacy
     ``` ts
-    const value = 'all' // 'contacts' | 'contact_blacklist'
+    const value = 'all' // 'contacts' | 'contact_blacklist' | 'none'
     await sock.updateGroupsAddPrivacy(value)
     ```
 - To update the Default Disappearing Mode
@@ -870,7 +1504,7 @@ Some examples:
 1. Functionality to track the battery percentage of your phone.
     You enable logging and you'll see a message about your battery pop up in the console: 
     ```{"level":10,"fromMe":false,"frame":{"tag":"ib","attrs":{"from":"@s.whatsapp.net"},"content":[{"tag":"edge_routing","attrs":{},"content":[{"tag":"routing_info","attrs":{},"content":{"type":"Buffer","data":[8,2,8,5]}}]}]},"msg":"communication"} ``` 
-
+    
    The "frame" is what the message received is, it has three components:
    - `tag` -- what this frame is about (eg. message will have "message")
    - `attrs` -- a string key-value pair with some metadata (contains ID of the message usually)
@@ -886,4 +1520,4 @@ Some examples:
     // for any message with tag 'edge_routing', id attribute = abcd & first content node routing_info
     sock.ws.on(`CB:edge_routing,id:abcd,routing_info`, (node: BinaryNode) => { })
     ```
-Also, this repo is now licenced under GPL 3 since it uses [libsignal-node](https://git.questbook.io/backend/service-coderunner/-/merge_requests/1)
+ Also, this repo is now licenced under GPL 3 since it uses [libsignal-node](https://git.questbook.io/backend/service-coderunner/-/merge_requests/1)
