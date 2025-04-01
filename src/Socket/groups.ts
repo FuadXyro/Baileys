@@ -80,6 +80,7 @@ export const makeGroupsSocket = (config: SocketConfig) => {
 
 	return {
 		...sock,
+		groupQuery,
 		groupMetadata,
 		groupCreate: async(subject: string, participants: string[]) => {
 			const key = generateMessageID()

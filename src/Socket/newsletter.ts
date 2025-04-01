@@ -92,6 +92,8 @@ export const makeNewsletterSocket = (config: SocketConfig) => {
 
 	return {
 		...sock,
+		newsletterQuery,
+		newsletterWMexQuery,
 		subscribeNewsletterUpdates: async(jid: string) => {
 			const result = await newsletterQuery(jid, 'set', [{ tag: 'live_updates', attrs: {}, content: [] }])
 

@@ -3,10 +3,11 @@ import { Boom } from '@hapi/boom'
 import NodeCache from 'node-cache'
 import { proto } from '../../WAProto'
 import { DEFAULT_CACHE_TTLS, WA_DEFAULT_EPHEMERAL } from '../Defaults'
-import { AnyMessageContent, Media, MediaConnInfo, MessageReceiptType, MessageRelayOptions, MiscMessageGenerationOptions, SocketConfig, WAMediaUploadFunctionOpts, WAMessageKey } from '../Types'
+import { AnyMessageContent, Media, MediaConnInfo, MessageReceiptType, MessageRelayOptions, MiscMessageGenerationOptions, QueryIds, SocketConfig, WAMediaUploadFunctionOpts, WAMessageKey, XWAPaths } from '../Types'
 import { aggregateMessageKeysNotFromMe, assertMediaContent, bindWaitForEvent, decryptMediaRetryData, delay, encodeSignedDeviceIdentity, encodeWAMessage, encryptMediaRetryRequest, extractDeviceJids, generateMessageID, generateWAMessage, generateWAMessageFromContent, getContentType, getStatusCodeForMediaRetry, getUrlFromDirectPath, getWAUploadToServer, parseAndInjectE2ESessions, unixTimestampSeconds, normalizeMessageContent } from '../Utils'
 import { getUrlInfo } from '../Utils/link-preview'
 import { areJidsSameUser, BinaryNode, BinaryNodeAttributes, getBinaryNodeChild, getBinaryNodeChildren, isJidGroup, isJidNewsLetter, isJidUser, jidDecode, jidEncode, jidNormalizedUser, JidWithDevice, S_WHATSAPP_NET, STORIES_JID } from '../WABinary'
+import { USyncQuery, USyncUser } from '../WAUSync'
 import { makeNewsletterSocket } from './newsletter'
 import ListType = proto.Message.ListMessage.ListType;
 import { Readable } from 'stream'
@@ -31,6 +32,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		generateMessageTag,
 		sendNode,
 		groupMetadata,
+		groupQuery,
+		newsletterWMexQuery,
 		groupToggleEphemeral
 	} = sock
 
@@ -136,7 +139,43 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		// based on privacy settings, we have to change the read type
 		const readType = privacySettings.readreceipts === 'all' ? 'read' : 'read-self'
 		await sendReceipts(keys, readType)
- 	}
+ 	} 	
+	
+	const profilePictureUrl = async (jid: string, type: 'preview' | 'image' = 'preview', timeoutMs ? : number) => {
+        jid = jidNormalizedUser(jid)
+        if (isJidNewsLetter(jid)) {
+            const node = await newsletterWMexQuery(undefined, QueryIds.METADATA, {
+		       input: {
+		          key: jid,
+		          type: "JID",
+		          'view_role': 'GUEST'
+		       },
+				'fetch_viewer_metadata': true,
+				'fetch_full_image': true,
+				'fetch_creation_time': true
+	        })	  
+	        const result = getBinaryNodeChild(node, 'result')?.content?.toString()
+	        const metadataPath = JSON.parse(result!).data[XWAPaths.NEWSLETTER]
+	        const pictype = type === 'image' ? 'picture' : 'preview'
+            const directPath = metadataPath?.thread_metadata[pictype]?.direct_path
+	        return directPath ? getUrlFromDirectPath(directPath) : null
+        } else {
+            const result = await query({
+                tag: 'iq',
+                attrs: {
+                    target: jid,
+                    to: S_WHATSAPP_NET,
+                    type: 'get',
+                    xmlns: 'w:profile:picture'
+                },
+                content: [
+                    { tag: 'picture', attrs: { type, query: 'url' } }
+                ]
+            }, timeoutMs)
+            const child = getBinaryNodeChild(result, 'picture')
+            return child?.attrs?.url
+        }
+    }
 
 	/** Fetch all the devices we've to send a message to */
 	const getUSyncDevices = async(jids: string[], useCache: boolean, ignoreZeroDevices: boolean) => {
@@ -146,72 +185,54 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			logger.debug('not using cache for devices')
 		}
 
-		const users: BinaryNode[] = []
+		const toFetch: string[] = []
 		jids = Array.from(new Set(jids))
+
 		for(let jid of jids) {
 			const user = jidDecode(jid)?.user
 			jid = jidNormalizedUser(jid)
+			if(useCache) {
+				const devices = userDevicesCache.get<JidWithDevice[]>(user!)
+				if(devices) {
+					deviceResults.push(...devices)
 
-			const devices = userDevicesCache.get<JidWithDevice[]>(user!)
-			if(devices && useCache) {
-				deviceResults.push(...devices)
-
-				logger.trace({ user }, 'using cache for devices')
+					logger.trace({ user }, 'using cache for devices')
+				} else {
+					toFetch.push(jid)
+				}
 			} else {
-				users.push({ tag: 'user', attrs: { jid } })
+				toFetch.push(jid)
 			}
 		}
 
-		if(!users.length) {
+		if(!toFetch.length) {
 			return deviceResults
 		}
 
-		const iq: BinaryNode = {
-			tag: 'iq',
-			attrs: {
-				to: S_WHATSAPP_NET,
-				type: 'get',
-				xmlns: 'usync',
-			},
-			content: [
-				{
-					tag: 'usync',
-					attrs: {
-						sid: generateMessageTag(),
-						mode: 'query',
-						last: 'true',
-						index: '0',
-						context: 'message',
-					},
-					content: [
-						{
-							tag: 'query',
-							attrs: { },
-							content: [
-								{
-									tag: 'devices',
-									attrs: { version: '2' }
-								}
-							]
-						},
-						{ tag: 'list', attrs: { }, content: users }
-					]
-				},
-			],
-		}
-		const result = await query(iq)
-		const extracted = extractDeviceJids(result, authState.creds.me!.id, ignoreZeroDevices)
-		const deviceMap: { [_: string]: JidWithDevice[] } = {}
+		const query = new USyncQuery()
+			.withContext('message')
+			.withDeviceProtocol()
 
-		for(const item of extracted) {
-			deviceMap[item.user] = deviceMap[item.user] || []
-			deviceMap[item.user].push(item)
-
-			deviceResults.push(item)
+		for(const jid of toFetch) {
+			query.withUser(new USyncUser().withId(jid))
 		}
 
-		for(const key in deviceMap) {
-			userDevicesCache.set(key, deviceMap[key])
+		const result = await sock.executeUSyncQuery(query)
+
+		if(result) {
+			const extracted = extractDeviceJids(result?.list, authState.creds.me!.id, ignoreZeroDevices)
+			const deviceMap: { [_: string]: JidWithDevice[] } = {}
+
+			for(const item of extracted) {
+				deviceMap[item.user] = deviceMap[item.user] || []
+				deviceMap[item.user].push(item)
+
+				deviceResults.push(item)
+			}
+
+			for(const key in deviceMap) {
+				userDevicesCache.set(key, deviceMap[key])
+			}
 		}
 
 		return deviceResults
@@ -348,7 +369,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const isGroup = server === 'g.us'
 		const isStatus = jid === statusJid
 		const isLid = server === 'lid'
-        const isPrivate = server === 's.whatsapp.net'
+        const isPerson = server === 's.whatsapp.net'
 		const isNewsletter = server === 'newsletter'
 
 		msgId = msgId || generateMessageID()
@@ -577,9 +598,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				if(additionalNodes && additionalNodes.length > 0) {
                       (stanza.content as BinaryNode[]).push(...additionalNodes);
                 }
-                const inMsg = normalizeMessageContent(message)!
-                const key = getContentType(inMsg)!
-                if(!isNewsletter && (key === 'interactiveMessage' || key === 'buttonsMessage')) {
+                const Msg = normalizeMessageContent(message)!
+                const key = getContentType(Msg)!
+                if(!isNewsletter && ((key === 'interactiveMessage' && Msg?.interactiveMessage?.nativeFlowMessage) || key === 'buttonsMessage')) {
                     const nativeNode = {
 						  tag: 'biz',
 						  attrs: {},
@@ -593,7 +614,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			   					  tag: 'native_flow',
 			   					  attrs: { 
 			   					     name: 'quick_reply',
-			   				      }
+			   				      },
 							  }]
     					  }]
 				    }
@@ -603,8 +624,24 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				    } else {
 				        (stanza.content as BinaryNode[]).push(nativeNode);
 				    }
-				}  
-				if(isPrivate) {
+				}
+				 				
+				if(message.listMessage) {
+					(stanza.content as BinaryNode[]).push({
+						tag: 'biz',
+						attrs: { },
+						content: [
+							{
+								tag: 'list',
+								attrs: getButtonArgs(message),
+							}
+						]
+					});
+
+					logger.debug({ jid }, 'adding business node')
+				}
+  
+				if(isPerson) {
 				    const botNode = { 
 				          tag: 'bot', 
 				          attrs: { biz_bot: '1' }
@@ -615,22 +652,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
                     } else {
                       (stanza.content as BinaryNode[]).push(botNode)
                     }
-				} 
-				
-                const buttonType = getButtonType(message)
-				if(buttonType) {
-					(stanza.content as BinaryNode[]).push({
-						tag: 'biz',
-						attrs: { },
-						content: [
-							{
-								tag: buttonType,
-								attrs: getButtonArgs(message),
-							}
-						]
-					})
-
-					logger.debug({ jid }, 'adding business node')
 				}
 
 				logger.debug({ msgId }, `sending message to ${participants.length} devices`)
@@ -644,29 +665,29 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 
     const filterNativeNode = (nodeContent) => {
-          if (Array.isArray(nodeContent)) {
-               return nodeContent!.filter((item) => {
-                    if (item!.tag === 'biz' && (item!.content && item!.content!.filter((tag) => { tag!.tag === 'interactive' && tag!.attrs!.type === 'native_flow' && tag!.attrs!.v === '1' }))) {
-                         return false;
-                    }
-               return true;
-               });
-          } else {
-               return nodeContent;
-          }
+        if(Array.isArray(nodeContent)) {
+            return nodeContent!.filter((item) => {
+                if(item!.tag === 'biz' && item?.content[0]?.tag === 'interactive' && item?.content[0]?.attrs?.type === 'native_flow' && item?.content[0]?.content[0]?.tag === 'native_flow' && item?.content[0]?.content[0]?.attrs?.name === 'quick_reply') {
+                    return false;
+                }
+                return true;
+            });
+        } else {
+            return nodeContent;
+        }
     };
     
     const filterBotNode = (nodeContent) => {
-          if (Array.isArray(nodeContent)) {
-               return nodeContent!.filter((item) => {
-                    if (item!.tag === 'bot' && item!.attrs!.biz_bot === '1') {
-                         return false;
-                    }
-               return true;
-               });
-          } else {
-               return nodeContent;
-          }
+        if(Array.isArray(nodeContent)) {
+            return nodeContent.filter((item) => {
+                if(item?.tag === 'bot' && item?.attrs?.biz_bot === '1') {
+                    return false;
+                }
+                return true;
+            });
+        } else {
+            return nodeContent;
+        }
     };
     
 	const getTypeMessage = (msg: proto.IMessage) => {
@@ -725,12 +746,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
         }
 	}
 
-	const getButtonType = (message: proto.IMessage) => {
-	    const Msg = normalizeMessageContent(message)!
-	    if(Msg.listMessage) {
-			return 'list'
-		}
-	}
 
 	const getButtonArgs = (message: proto.IMessage): BinaryNode['attrs'] => {
 		if(message.templateMessage) {
@@ -795,6 +810,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		getUSyncDevices,
 		sendPeerDataOperationMessage,
 		createParticipantNodes,
+		profilePictureUrl,
 	    waUploadToServer,
 		fetchPrivacySettings,
 		updateMediaMessage: async(message: proto.IWebMessageInfo) => {
@@ -858,13 +874,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
            for(const id of jids) {
 		      const { user, server } = jidDecode(id)!
 		      const isGroup = server === 'g.us'
-              const isPrivate = server === 's.whatsapp.net'
+              const isPerson = server === 's.whatsapp.net'
               if(isGroup) {
                  let userId = await groupMetadata(id)
                  let participant = await userId.participants
                  let users = await Promise.all(participant.map(u => jidNormalizedUser(u.id))); 
                  allUsers = [...allUsers as string[], ...users as string[]];
-              } else if(isPrivate) {
+              } else if(isPerson) {
                  let users = await Promise.all(jids.map(id => id.replace(/\b\d{18}@.{4}\b/g, '')));
                  allUsers = [...allUsers as string[], ...users as string[]];
               }
@@ -935,8 +951,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
            jids.forEach(async id => {
                id = jidNormalizedUser(id)!
 		       const { user, server } = jidDecode(id)!
-               const isPrivate = server === 's.whatsapp.net'
-               let type = isPrivate
+               const isPerson = server === 's.whatsapp.net'
+               let type = isPerson
                    ? 'statusMentionMessage' 
                    : 'groupStatusMentionMessage'
                await relayMessage(
@@ -986,10 +1002,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
             await relayMessage(jid, album.message!,
             { messageId: album.key.id! })
 
+            let mediaHandle;
+            let msg;
             for (const i in medias) {
                const media = medias[i]
-               let mediaHandle;
-               let msg;
                 if(media.image) {
                      msg = await generateWAMessage(
                          jid,
@@ -1000,7 +1016,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
                          },
                          { 
                              userJid,
-                             upload: async (readStream, opts) => {
+                             upload: async(readStream, opts) => {
                                  const up = await waUploadToServer(readStream, { ...opts, newsletter: isJidNewsLetter(jid) });
                                 mediaHandle = up.handle;
                                 return up;
@@ -1018,7 +1034,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
                          },
                          { 
                              userJid,
-                             upload: async (readStream, opts) => {
+                             upload: async(readStream, opts) => {
                                  const up = await waUploadToServer(readStream, { ...opts, newsletter: isJidNewsLetter(jid) });
                                 mediaHandle = up.handle;
                                 return up;
@@ -1027,11 +1043,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
                          }
                      )
                 }
-
-                msg.message.messageContextInfo = {
-                   messageAssociation: {
-                      associationType: 1,
-                      parentMessageKey: album.key!
+                
+                if(msg) {
+                   msg.message.messageContextInfo = {
+                      messageAssociation: {
+                         associationType: 1,
+                         parentMessageKey: album.key!
+                      }
                    }
                 }
 
@@ -1047,7 +1065,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			content: AnyMessageContent,
 			options: MiscMessageGenerationOptions = { }
 		) => {
-			const userJid = authState.creds.me!.id            
+			const userJid = authState.creds.me!.id
 
 			if(
 				typeof content === 'object' &&
@@ -1061,13 +1079,31 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					disappearingMessagesInChat
 				await groupToggleEphemeral(jid, value)
 			} else {
-				let mediaHandle
+				let mediaHandle  
+	            const { server } = jidDecode(jid)!
+	            const isGroup = server === 'g.us'
+
+                let eph;
+		        if(isGroup) {
+                    const disappearingNode = await groupQuery(jid, 'get', [
+			                {
+			                    tag: 'query', 
+			                    attrs: { request: 'interactive' }
+			                } 
+			            ]
+                    )
+                    const group = getBinaryNodeChild(disappearingNode, 'group')!
+                    const expiration = getBinaryNodeChild(group, 'ephemeral')!
+                    eph = expiration?.attrs?.expiration
+                }
+                
 				const fullMsg = await generateWAMessage(
 					jid,
 					content,
 					{
 						logger,
 						userJid,
+						ephemeralExpiration: (options.ephemeralExpiration && options.ephemeralExpiration >= 0) ? options.ephemeralExpiration : eph,
 						getUrlInfo: text => getUrlInfo(
 							text,
 							{
@@ -1091,7 +1127,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						options: config.options,
 						...options,
 					}
-				)
+				)                          
 				const isAiMsg = 'ai' in content && !!content.ai
 				const isPinMsg = 'pin' in content && !!content.pin;
 				const isKeepMsg = 'keep' in content && content.keep;
